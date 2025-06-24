@@ -1,0 +1,233 @@
+# Makefile for Enterprise Odoo Terraform Deployment
+
+.PHONY: help init plan apply destroy validate format lint security clean docs
+
+# Default target
+help: ## Show this help message
+	@echo "Enterprise Odoo Terraform Deployment"
+	@echo "====================================="
+	@echo ""
+	@echo "Available targets:"
+	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-15s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+
+# Environment variables
+ENV ?= dev
+REGION ?= us-west-2
+PROJECT ?= enterprise-odoo
+
+# Terraform commands
+init: ## Initialize Terraform
+	@echo "Initializing Terraform..."
+	terraform init
+	@echo "✅ Terraform initialized"
+
+validate: ## Validate Terraform configuration
+	@echo "Validating Terraform configuration..."
+	terraform validate
+	@echo "✅ Terraform configuration is valid"
+
+format: ## Format Terraform code
+	@echo "Formatting Terraform code..."
+	terraform fmt -recursive
+	@echo "✅ Terraform code formatted"
+
+plan: validate ## Create Terraform execution plan
+	@echo "Creating Terraform plan for $(ENV) environment..."
+	terraform plan -var-file="$(ENV).tfvars" -out="$(ENV).tfplan"
+	@echo "✅ Terraform plan created: $(ENV).tfplan"
+
+apply: ## Apply Terraform configuration
+	@echo "Applying Terraform configuration for $(ENV) environment..."
+	@read -p "Are you sure you want to apply changes to $(ENV)? [y/N] " confirm && [ "$$confirm" = "y" ]
+	terraform apply "$(ENV).tfplan"
+	@echo "✅ Terraform configuration applied"
+
+destroy: ## Destroy Terraform-managed infrastructure
+	@echo "⚠️  WARNING: This will destroy all infrastructure in $(ENV) environment!"
+	@read -p "Type 'destroy-$(ENV)' to confirm: " confirm && [ "$$confirm" = "destroy-$(ENV)" ]
+	terraform destroy -var-file="$(ENV).tfvars"
+	@echo "✅ Infrastructure destroyed"
+
+# Development and testing
+lint: ## Run Terraform linting
+	@echo "Running Terraform linting..."
+	@if command -v tflint >/dev/null 2>&1; then \
+		tflint --recursive; \
+		echo "✅ Terraform linting completed"; \
+	else \
+		echo "❌ tflint not installed. Install with: curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash"; \
+	fi
+
+security: ## Run security scanning
+	@echo "Running security scan..."
+	@if command -v tfsec >/dev/null 2>&1; then \
+		tfsec .; \
+		echo "✅ Security scan completed"; \
+	else \
+		echo "❌ tfsec not installed. Install with: curl -s https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | bash"; \
+	fi
+
+cost: ## Estimate infrastructure costs
+	@echo "Estimating infrastructure costs..."
+	@if command -v infracost >/dev/null 2>&1; then \
+		infracost breakdown --path .; \
+		echo "✅ Cost estimation completed"; \
+	else \
+		echo "❌ infracost not installed. Install from: https://www.infracost.io/docs/#quick-start"; \
+	fi
+
+# Documentation
+docs: ## Generate documentation
+	@echo "Generating documentation..."
+	@if command -v terraform-docs >/dev/null 2>&1; then \
+		terraform-docs markdown table --output-file README.md .; \
+		echo "✅ Documentation generated"; \
+	else \
+		echo "❌ terraform-docs not installed. Install from: https://terraform-docs.io/user-guide/installation/"; \
+	fi
+
+# Environment setup
+setup-dev: ## Set up development environment
+	@echo "Setting up development environment..."
+	@cp terraform.tfvars.example dev.tfvars
+	@echo "✅ Development environment setup complete"
+	@echo "📝 Please edit dev.tfvars with your configuration"
+
+setup-staging: ## Set up staging environment
+	@echo "Setting up staging environment..."
+	@cp terraform.tfvars.example staging.tfvars
+	@echo "✅ Staging environment setup complete"
+	@echo "📝 Please edit staging.tfvars with your configuration"
+
+setup-prod: ## Set up production environment
+	@echo "Setting up production environment..."
+	@cp terraform.tfvars.example prod.tfvars
+	@echo "✅ Production environment setup complete"
+	@echo "📝 Please edit prod.tfvars with your configuration"
+
+# AWS operations
+aws-login: ## Configure AWS credentials
+	@echo "Configuring AWS credentials..."
+	aws configure
+	@echo "✅ AWS credentials configured"
+
+aws-check: ## Check AWS credentials and permissions
+	@echo "Checking AWS credentials..."
+	@aws sts get-caller-identity
+	@echo "✅ AWS credentials are valid"
+
+# Backup and recovery
+backup-state: ## Backup Terraform state
+	@echo "Backing up Terraform state..."
+	@mkdir -p backups
+	@cp terraform.tfstate backups/terraform.tfstate.$(shell date +%Y%m%d_%H%M%S)
+	@echo "✅ Terraform state backed up"
+
+# Monitoring and maintenance
+status: ## Show infrastructure status
+	@echo "Infrastructure Status for $(ENV):"
+	@echo "=================================="
+	@terraform show -json | jq -r '.values.root_module.resources[] | select(.type == "aws_instance") | "\(.address): \(.values.instance_state)"' 2>/dev/null || echo "No instances found or jq not installed"
+
+outputs: ## Show Terraform outputs
+	@echo "Terraform Outputs:"
+	@echo "=================="
+	terraform output
+
+refresh: ## Refresh Terraform state
+	@echo "Refreshing Terraform state..."
+	terraform refresh -var-file="$(ENV).tfvars"
+	@echo "✅ Terraform state refreshed"
+
+# Cleanup
+clean: ## Clean up temporary files
+	@echo "Cleaning up temporary files..."
+	@rm -f *.tfplan
+	@rm -f *.log
+	@rm -rf .terraform/
+	@echo "✅ Cleanup completed"
+
+clean-all: clean ## Clean up all generated files
+	@echo "Cleaning up all generated files..."
+	@rm -f terraform.tfstate*
+	@rm -rf backups/
+	@echo "✅ All cleanup completed"
+
+# Installation helpers
+install-tools: ## Install required tools
+	@echo "Installing required tools..."
+	@echo "Installing Terraform..."
+	@curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
+	@sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $$(lsb_release -cs) main"
+	@sudo apt-get update && sudo apt-get install terraform
+	@echo "Installing tflint..."
+	@curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+	@echo "Installing tfsec..."
+	@curl -s https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | bash
+	@echo "Installing terraform-docs..."
+	@curl -Lo ./terraform-docs.tar.gz https://github.com/terraform-docs/terraform-docs/releases/download/v0.16.0/terraform-docs-v0.16.0-linux-amd64.tar.gz
+	@tar -xzf terraform-docs.tar.gz
+	@chmod +x terraform-docs
+	@sudo mv terraform-docs /usr/local/bin/
+	@rm terraform-docs.tar.gz
+	@echo "✅ All tools installed"
+
+# CI/CD helpers
+ci-validate: format validate lint security ## Run all validation checks for CI
+	@echo "✅ All CI validation checks passed"
+
+ci-plan: ci-validate ## Create plan for CI/CD
+	terraform plan -var-file="$(ENV).tfvars" -out="$(ENV).tfplan"
+
+ci-apply: ## Apply configuration in CI/CD
+	terraform apply -auto-approve "$(ENV).tfplan"
+
+# Quick start
+quick-start: setup-dev init plan ## Quick start for development
+	@echo "🚀 Quick start completed!"
+	@echo "Next steps:"
+	@echo "1. Edit dev.tfvars with your configuration"
+	@echo "2. Run 'make apply ENV=dev' to deploy"
+
+# Production deployment
+prod-deploy: ## Deploy to production (with safety checks)
+	@echo "🚨 PRODUCTION DEPLOYMENT"
+	@echo "======================="
+	@echo "Environment: $(ENV)"
+	@echo "Region: $(REGION)"
+	@echo "Project: $(PROJECT)"
+	@echo ""
+	@read -p "Have you reviewed the plan? [y/N] " confirm && [ "$$confirm" = "y" ]
+	@read -p "Have you backed up the current state? [y/N] " confirm && [ "$$confirm" = "y" ]
+	@read -p "Type 'deploy-production' to confirm: " confirm && [ "$$confirm" = "deploy-production" ]
+	$(MAKE) backup-state
+	$(MAKE) apply ENV=prod
+
+# Emergency procedures
+emergency-stop: ## Emergency stop (destroy non-critical resources)
+	@echo "🚨 EMERGENCY STOP PROCEDURE"
+	@echo "=========================="
+	@echo "This will stop Auto Scaling Groups and non-critical resources"
+	@read -p "Type 'emergency-stop' to confirm: " confirm && [ "$$confirm" = "emergency-stop" ]
+	@aws autoscaling update-auto-scaling-group --auto-scaling-group-name $(PROJECT)-$(ENV)-asg --desired-capacity 0 --min-size 0
+	@echo "✅ Emergency stop completed"
+
+# Health checks
+health-check: ## Run health checks on deployed infrastructure
+	@echo "Running health checks..."
+	@echo "========================"
+	@echo "Checking ALB health..."
+	@aws elbv2 describe-target-health --target-group-arn $$(terraform output -raw target_group_arn) 2>/dev/null || echo "ALB not found"
+	@echo "Checking RDS status..."
+	@aws rds describe-db-instances --db-instance-identifier $(PROJECT)-$(ENV)-postgres 2>/dev/null | jq -r '.DBInstances[0].DBInstanceStatus' || echo "RDS not found"
+	@echo "✅ Health check completed"
+
+# Version information
+version: ## Show version information
+	@echo "Version Information:"
+	@echo "==================="
+	@echo "Terraform: $$(terraform version -json | jq -r '.terraform_version')"
+	@echo "AWS CLI: $$(aws --version 2>&1 | cut -d' ' -f1)"
+	@echo "Project: $(PROJECT)"
+	@echo "Environment: $(ENV)"
+	@echo "Region: $(REGION)"

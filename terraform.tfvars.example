@@ -1,0 +1,77 @@
+# Example Terraform Variables for Enterprise Odoo Deployment
+# Copy this file to terraform.tfvars and customize the values
+
+# General Configuration
+aws_region   = "us-west-2"
+project_name = "enterprise-odoo"
+environment  = "prod"
+owner        = "DevOps Team"
+cost_center  = "IT-Infrastructure"
+
+# Network Configuration
+vpc_cidr = "10.0.0.0/16"
+public_subnet_cidrs   = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
+private_subnet_cidrs  = ["10.0.11.0/24", "10.0.12.0/24", "10.0.13.0/24"]
+database_subnet_cidrs = ["10.0.21.0/24", "10.0.22.0/24", "10.0.23.0/24"]
+
+# Security Configuration
+# IMPORTANT: Restrict admin_cidr_blocks to your organization's IP ranges
+admin_cidr_blocks = [
+  "203.0.113.0/24",  # Replace with your office IP range
+  "198.51.100.0/24"  # Replace with your VPN IP range
+]
+
+# EC2 Configuration
+instance_type    = "t3.large"     # For production, consider m5.xlarge or c5.xlarge
+key_pair_name    = "odoo-prod-key" # Create this key pair in AWS first
+min_size         = 2
+max_size         = 6
+desired_capacity = 2
+
+# RDS Configuration
+db_instance_class        = "db.t3.large"  # For production, consider db.r5.xlarge
+db_allocated_storage     = 100
+db_max_allocated_storage = 1000
+db_name                  = "odoo"
+db_username              = "odoo_admin"
+backup_retention_period  = 30
+backup_window           = "03:00-04:00"
+maintenance_window      = "sun:04:00-sun:05:00"
+
+# Domain and SSL Configuration
+domain_name = "odoo.yourcompany.com"  # Replace with your domain
+subject_alternative_names = [
+  "www.odoo.yourcompany.com",
+  "erp.yourcompany.com"
+]
+health_check_path = "/web/health"
+
+# S3 Configuration
+enable_cross_region_replication = true
+replication_region             = "us-east-1"
+backup_lifecycle_days          = 30
+media_lifecycle_days           = 90
+
+# Monitoring Configuration
+notification_email = "devops@yourcompany.com"  # Replace with your email
+
+# Backup Configuration
+backup_schedule          = "cron(0 2 * * ? *)"  # Daily at 2 AM UTC
+backup_retention_days    = 30
+backup_cold_storage_days = 90
+
+# Cost Optimization Settings
+# These are configured in the modules but can be customized:
+# - Auto Scaling policies for cost optimization
+# - S3 Intelligent Tiering for automatic cost optimization
+# - RDS Performance Insights for database optimization
+# - CloudWatch for resource monitoring and optimization
+
+# Security and Compliance Settings
+# These are automatically configured for HIPAA and SOC-2 compliance:
+# - Encryption at rest and in transit
+# - VPC Flow Logs
+# - CloudTrail logging
+# - Multi-AZ deployment
+# - Automated backups
+# - Security groups with least privilege access
